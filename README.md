@@ -14,6 +14,7 @@ CLASH is a real-time AI battleground where five distinct agents analyze the same
 - Interactive replay timeline with scrub/play/pause/replay + event markers (`⚡`, `💥`, `☠`, `🏁`).
 - Deterministic `RUN DEMO` mode for high-impact judge walkthroughs.
 - Optional replay export/import as JSON for sharing deterministic replays.
+- Camera Mode stage direction: event-driven focus, snap switches on rebuttals, manipulator instability, and outcome takeover.
 
 ## Tech Stack
 
@@ -36,6 +37,7 @@ npm run dev
 
 - `RUN DEMO`: Loads a deterministic cinematic sequence with guaranteed disagreement and manipulation reveal.
 - `REPLAY TIMELINE`: Drag scrubber to seek forward/backward instantly; use `PLAY`, `PAUSE`, and `REPLAY`.
+- `CAMERA MODE`: Replay automatically focuses the active agent and de-emphasizes others.
 - `SOUND ON/OFF`: Toggles ambient tension and event cues.
 - `EXPORT REPLAY` / `LOAD REPLAY`: Save and reload replay JSON data.
 

@@ -221,6 +221,16 @@ body {
   grid-template-columns: 1.25fr 0.75fr;
   gap: 16px;
   margin-top: 18px;
+  transition: transform 320ms ease, filter 320ms ease, opacity 320ms ease;
+  transform-origin: center top;
+}
+
+.battle-grid.camera-zoom {
+  transform: scale(1.015);
+}
+
+.battle-grid.camera-shake {
+  animation: cameraShake 260ms ease-out;
 }
 
 .panel {
@@ -262,6 +272,14 @@ body {
   background: #0d1019;
   padding: 12px;
   min-height: 188px;
+  transition:
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 300ms ease,
+    opacity 280ms ease,
+    box-shadow 300ms ease,
+    border-color 280ms ease;
+  transform-origin: center center;
+  filter: brightness(0.96) blur(0px);
 }
 
 .agent-card.winner {
@@ -270,6 +288,34 @@ body {
 
 .agent-card.glitch {
   animation: glitchPulse 0.26s linear 3;
+}
+
+.agent-card.focused {
+  transform: scale(1.08);
+  opacity: 1;
+  filter: brightness(1) blur(0px);
+  box-shadow:
+    0 0 0 1px #9aa7ff66,
+    0 0 26px #8b95ff52,
+    inset 0 0 0 1px #c8d0ff1a;
+  z-index: 2;
+}
+
+.agent-card.focused.focus-snap {
+  animation: focusSnap 240ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.agent-card.focused.focus-aggressive {
+  animation:
+    focusSnap 220ms cubic-bezier(0.2, 0.9, 0.2, 1),
+    manipulatorFlicker 360ms linear 2;
+}
+
+.agent-card.deemphasized {
+  opacity: 0.48;
+  filter: brightness(0.68) blur(2.8px);
+  transform: scale(0.97);
+  box-shadow: none !important;
 }
 
 .agent-head {
@@ -433,6 +479,18 @@ body {
 
 .outcome-layer {
   margin-top: 16px;
+  transition: opacity 320ms ease, filter 320ms ease;
+}
+
+.camera-outcome .battle-grid,
+.camera-outcome .scenario-bar,
+.camera-outcome .controls-bar,
+.camera-outcome .scenario-suggestions,
+.camera-outcome .timeline-scrubber,
+.camera-outcome .hero,
+.camera-outcome .outcome-layer {
+  opacity: 0.28;
+  filter: blur(2px) saturate(0.8);
 }
 
 .outcome-grid {
@@ -470,6 +528,54 @@ body {
   padding: 8px 10px;
 }
 
+.outcome-takeover {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+  background:
+    radial-gradient(600px 260px at 50% 45%, #3a255d66, transparent 70%),
+    radial-gradient(700px 280px at 50% 55%, #0b0f23dd, #06070cee 70%);
+  border: 1px solid #5964a136;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.outcome-takeover p {
+  margin: 0;
+  letter-spacing: 0.22em;
+  font-size: 0.78rem;
+  color: #b8c4ff;
+}
+
+.outcome-takeover h2 {
+  margin: 12px 0;
+  font-size: clamp(2rem, 7vw, 4.5rem);
+  letter-spacing: 0.12em;
+  line-height: 0.95;
+}
+
+.outcome-takeover strong {
+  max-width: 760px;
+  font-size: 1.05rem;
+  color: #dce2ff;
+}
+
+.outcome-takeover span {
+  margin-top: 12px;
+  color: #ffd6ba;
+  font-size: 0.92rem;
+  border: 1px solid #6f4d33;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #281912d1;
+}
+
 @keyframes glitchPulse {
   0% {
     transform: translate(0, 0);
@@ -490,6 +596,51 @@ body {
   100% {
     transform: translate(0, 0);
     filter: hue-rotate(0deg);
+  }
+}
+
+@keyframes focusSnap {
+  0% {
+    transform: scale(0.98);
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes manipulatorFlicker {
+  0% {
+    filter: brightness(1.1) hue-rotate(0deg);
+  }
+  40% {
+    filter: brightness(1.2) hue-rotate(18deg);
+  }
+  70% {
+    filter: brightness(0.9) hue-rotate(-15deg);
+  }
+  100% {
+    filter: brightness(1) hue-rotate(0deg);
+  }
+}
+
+@keyframes cameraShake {
+  0% {
+    transform: translate(0, 0) scale(1.015);
+  }
+  25% {
+    transform: translate(-3px, 1px) scale(1.015);
+  }
+  50% {
+    transform: translate(2px, -2px) scale(1.015);
+  }
+  75% {
+    transform: translate(-1px, 1px) scale(1.015);
+  }
+  100% {
+    transform: translate(0, 0) scale(1.015);
   }
 }
 

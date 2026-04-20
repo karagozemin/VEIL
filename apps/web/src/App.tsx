@@ -54,12 +54,16 @@ function App() {
   const [cursorMs, setCursorMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [focusAgentId, setFocusAgentId] = useState<string | null>(null);
+  const [focusBeat, setFocusBeat] = useState<"smooth" | "snap" | "aggressive" | "outcome">("smooth");
+  const [isShaking, setIsShaking] = useState(false);
 
   const soundEnabledRef = useRef(true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const ambientNodesRef = useRef<AmbientNodes | null>(null);
   const lastAudibleEventIndexRef = useRef(-1);
   const replayImportInputRef = useRef<HTMLInputElement | null>(null);
+  const shakeTimerRef = useRef<number | null>(null);
 
   const durationMs = useMemo(() => getDurationMs(events), [events]);
   const markers = useMemo(() => getEventMarkers(events), [events]);
@@ -269,6 +273,65 @@ function App() {
   }, [isPlaying, cursorMs, durationMs]);
 
   useEffect(() => {
+    const event = replayState.lastEvent;
+
+    if (!event) {
+      setFocusAgentId(null);
+      setFocusBeat("smooth");
+      return;
+    }
+
+    if (event.type === "outcome") {
+      setFocusAgentId(event.winnerAgentId);
+      setFocusBeat("outcome");
+      return;
+    }
+
+    if (event.type === "agent_rebuttal") {
+      setFocusAgentId(event.agentId);
+      setFocusBeat("snap");
+      setIsShaking(true);
+      if (shakeTimerRef.current) {
+        window.clearTimeout(shakeTimerRef.current);
+      }
+      shakeTimerRef.current = window.setTimeout(() => {
+        setIsShaking(false);
+      }, 260);
+      return;
+    }
+
+    if (event.type === "agent_decision") {
+      const manipulative = event.turn.agentId === "manipulator" || event.turn.maliciousSignal;
+      setFocusAgentId(event.turn.agentId);
+      setFocusBeat(manipulative ? "aggressive" : "smooth");
+
+      if (manipulative) {
+        setIsShaking(true);
+        if (shakeTimerRef.current) {
+          window.clearTimeout(shakeTimerRef.current);
+        }
+        shakeTimerRef.current = window.setTimeout(() => {
+          setIsShaking(false);
+        }, 280);
+      }
+      return;
+    }
+
+    if (event.type === "agent_thinking") {
+      setFocusAgentId(event.agentId);
+      setFocusBeat("smooth");
+    }
+  }, [replayState.lastEvent]);
+
+  useEffect(() => {
+    return () => {
+      if (shakeTimerRef.current) {
+        window.clearTimeout(shakeTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isPlaying || !soundEnabled || events.length === 0) {
       return;
     }
@@ -295,6 +358,9 @@ function App() {
     setEvents(nextEvents);
     setCursorMs(0);
     setIsPlaying(autoPlay);
+    setFocusAgentId(null);
+    setFocusBeat("smooth");
+    setIsShaking(false);
     lastAudibleEventIndexRef.current = -1;
   };
 
@@ -385,9 +451,11 @@ function App() {
   const firstTimestamp = events[0]?.timestamp;
   const manipulatorRecentMs = firstTimestamp && replayState.lastManipulatorAt ? firstTimestamp + cursorMs - replayState.lastManipulatorAt : Infinity;
   const manipulatorGlitch = manipulatorRecentMs < 950;
+  const outcomeTakeover = Boolean(replayState.outcome && replayState.lastEvent?.type === "outcome");
+  const tensionZoom = disagreementIndex >= 60 && !outcomeTakeover;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${outcomeTakeover ? "camera-outcome" : ""}`.trim()}>
       <div className="scanline" />
 
       <AnimatePresence mode="wait">
@@ -460,7 +528,7 @@ function App() {
         onPlayPause={togglePlayPause}
       />
 
-      <main className="battle-grid">
+      <main className={`battle-grid ${tensionZoom ? "camera-zoom" : ""} ${isShaking ? "camera-shake" : ""}`.trim()}>
         <section className="agents-panel panel">
           <div className="panel-head">
             <h2>AGENT CHAMBER</h2>
@@ -473,12 +541,16 @@ function App() {
               const isWinner = replayState.outcome?.winnerAgentId === agent.id;
               const isManipulator = agent.id === "manipulator";
               const glitchClass = isManipulator && manipulatorGlitch ? "glitch" : "";
+              const hasDirectedFocus = Boolean(focusAgentId) && !outcomeTakeover;
+              const isFocused = focusAgentId === agent.id && hasDirectedFocus;
+              const isMuted = hasDirectedFocus && focusAgentId !== agent.id;
+              const beatClass = isFocused ? (focusBeat === "snap" ? "focus-snap" : focusBeat === "aggressive" ? "focus-aggressive" : "") : "";
 
               return (
                 <motion.article
                   layout
                   key={agent.id}
-                  className={`agent-card ${isWinner ? "winner" : ""} ${glitchClass}`.trim()}
+                  className={`agent-card ${isWinner ? "winner" : ""} ${glitchClass} ${isFocused ? "focused" : ""} ${isMuted ? "deemphasized" : ""} ${beatClass}`.trim()}
                   style={{ borderColor: agent.color, boxShadow: `0 0 0 1px ${agent.color}22, 0 0 32px ${agent.color}22` }}
                   initial={{ opacity: 0, y: 24 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -566,6 +638,23 @@ function App() {
           </div>
         </section>
       </main>
+
+      <AnimatePresence>
+        {outcomeTakeover && replayState.outcome && (
+          <motion.section
+            className="outcome-takeover"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+          >
+            <p>SYSTEM VERDICT</p>
+            <h2>{replayState.outcome.winnerAgentId.toUpperCase()} WINS</h2>
+            <strong>{replayState.outcome.summary}</strong>
+            {replayState.outcome.manipulationDetected && <span>Manipulation attempt failed integrity checks.</span>}
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       <footer className="outcome-layer panel">
         <div className="panel-head">
