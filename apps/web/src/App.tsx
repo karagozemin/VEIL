@@ -54,6 +54,7 @@ function App() {
   const [cursorMs, setCursorMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [dismissedOutcomeTimestamp, setDismissedOutcomeTimestamp] = useState<number | null>(null);
   const [focusAgentId, setFocusAgentId] = useState<string | null>(null);
   const [focusBeat, setFocusBeat] = useState<"smooth" | "snap" | "aggressive" | "outcome">("smooth");
   const [isShaking, setIsShaking] = useState(false);
@@ -67,6 +68,7 @@ function App() {
 
   const durationMs = useMemo(() => getDurationMs(events), [events]);
   const markers = useMemo(() => getEventMarkers(events), [events]);
+  const hasOutcomeEvent = useMemo(() => events.some((event) => event.type === "outcome"), [events]);
   const replayState = useMemo(() => resolveReplayState(events, cursorMs), [events, cursorMs]);
   const narration = useMemo(() => narrationForEvent(replayState.lastEvent), [replayState.lastEvent]);
 
@@ -266,11 +268,11 @@ function App() {
   }, [isPlaying, durationMs, events.length]);
 
   useEffect(() => {
-    if (isPlaying && cursorMs >= durationMs && durationMs > 0) {
+    if (isPlaying && hasOutcomeEvent && cursorMs >= durationMs && durationMs > 0) {
       setIsPlaying(false);
       syncAmbient(false);
     }
-  }, [isPlaying, cursorMs, durationMs]);
+  }, [isPlaying, hasOutcomeEvent, cursorMs, durationMs]);
 
   useEffect(() => {
     const event = replayState.lastEvent;
@@ -332,6 +334,23 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (replayState.lastEvent?.type === "outcome" && replayState.outcome) {
+        setDismissedOutcomeTimestamp(replayState.outcome.timestamp);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [replayState.lastEvent, replayState.outcome]);
+
+  useEffect(() => {
     if (!isPlaying || !soundEnabled || events.length === 0) {
       return;
     }
@@ -358,6 +377,7 @@ function App() {
     setEvents(nextEvents);
     setCursorMs(0);
     setIsPlaying(autoPlay);
+    setDismissedOutcomeTimestamp(null);
     setFocusAgentId(null);
     setFocusBeat("smooth");
     setIsShaking(false);
@@ -452,10 +472,11 @@ function App() {
   const manipulatorRecentMs = firstTimestamp && replayState.lastManipulatorAt ? firstTimestamp + cursorMs - replayState.lastManipulatorAt : Infinity;
   const manipulatorGlitch = manipulatorRecentMs < 950;
   const outcomeTakeover = Boolean(replayState.outcome && replayState.lastEvent?.type === "outcome");
+  const outcomeVisible = Boolean(outcomeTakeover && replayState.outcome && dismissedOutcomeTimestamp !== replayState.outcome.timestamp);
   const tensionZoom = disagreementIndex >= 60 && !outcomeTakeover;
 
   return (
-    <div className={`app-shell ${outcomeTakeover ? "camera-outcome" : ""}`.trim()}>
+    <div className={`app-shell ${outcomeVisible ? "camera-outcome" : ""}`.trim()}>
       <div className="scanline" />
 
       <AnimatePresence mode="wait">
@@ -640,7 +661,7 @@ function App() {
       </main>
 
       <AnimatePresence>
-        {outcomeTakeover && replayState.outcome && (
+        {outcomeVisible && replayState.outcome && (
           <motion.section
             className="outcome-takeover"
             initial={{ opacity: 0, scale: 0.98 }}
@@ -648,6 +669,13 @@ function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35, ease: "easeOut" }}
           >
+            <button
+              className="outcome-close"
+              onClick={() => setDismissedOutcomeTimestamp(replayState.outcome?.timestamp ?? null)}
+              aria-label="Close outcome overlay"
+            >
+              ×
+            </button>
             <p>SYSTEM VERDICT</p>
             <h2>{replayState.outcome.winnerAgentId.toUpperCase()} WINS</h2>
             <strong>{replayState.outcome.summary}</strong>

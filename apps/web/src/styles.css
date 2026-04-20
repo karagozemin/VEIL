@@ -543,7 +543,27 @@ body {
     radial-gradient(700px 280px at 50% 55%, #0b0f23dd, #06070cee 70%);
   border: 1px solid #5964a136;
   backdrop-filter: blur(6px);
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+.outcome-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #4b558b;
+  background: #0f1430d6;
+  color: #dce2ff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.outcome-close:hover {
+  background: #1a2250;
+  box-shadow: 0 0 12px #7f8bff66;
 }
 
 .outcome-takeover p {
