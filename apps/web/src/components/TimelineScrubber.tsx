@@ -23,6 +23,9 @@ const markerKind = (event: MatchEvent) => {
   if (event.type === "agent_rebuttal") {
     return "rebuttal";
   }
+  if (event.type === "agent_escalation") {
+    return "escalation";
+  }
   return "outcome";
 };
 

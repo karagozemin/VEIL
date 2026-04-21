@@ -1,4 +1,4 @@
-import { AGENTS, analyzeScenario, buildRebuttal, generateAgentTurn } from "./agents.js";
+import { AGENTS, analyzeScenario, buildEscalations, buildRebuttal, generateAgentTurn } from "./agents.js";
 import { AgentTurn, MatchOutcome } from "./types.js";
 import type { RandomFn } from "./random.js";
 
@@ -25,10 +25,21 @@ export const evaluateOutcome = (turns: AgentTurn[]): MatchOutcome => {
   const riskLevel = avgRisk > 67 ? "HIGH" : avgRisk > 38 ? "MEDIUM" : "LOW";
   const consensusScore = Math.round(computeConsensusScore(turns));
   const manipulationDetected = turns.some((turn) => turn.maliciousSignal);
+  const projectedImpactPercent = normalize(
+    Math.round(avgRisk * 0.58 + (100 - consensusScore) * 0.44 + (manipulationDetected ? 10 : 0)),
+    8,
+    72
+  );
 
   const summary = manipulationDetected
     ? `${winner.agentId} wins on reliability while manipulation pressure was detected in the arena.`
     : `${winner.agentId} wins with the strongest signal quality under conflict.`;
+
+  const impactStatement = manipulationDetected
+    ? `${winner.agentId} prevented a projected ${projectedImpactPercent}% loss by neutralizing manipulative pressure.`
+    : riskLevel === "HIGH"
+      ? `${winner.agentId} prevented a critical mistake and reduced projected downside by ${projectedImpactPercent}%.`
+      : `${winner.agentId} captured a ${projectedImpactPercent}% opportunity window with controlled risk.`;
 
   return {
     winnerAgentId: winner.agentId,
@@ -36,7 +47,9 @@ export const evaluateOutcome = (turns: AgentTurn[]): MatchOutcome => {
     manipulationDetected,
     riskLevel,
     consensusScore,
-    summary
+    summary,
+    projectedImpactPercent,
+    impactStatement
   };
 };
 
@@ -57,10 +70,13 @@ export const runConflictRound = (scenario: string, random: RandomFn = Math.rando
     };
   });
 
+  const escalations = buildEscalations(turns);
+
   return {
     analysis,
     turns,
     rebuttals,
+    escalations,
     outcome: evaluateOutcome(turns)
   };
 };

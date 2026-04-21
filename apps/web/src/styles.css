@@ -189,6 +189,30 @@ body {
   margin-top: 14px;
 }
 
+.scene-panel {
+  margin-top: 14px;
+}
+
+.scene-line {
+  border: 1px solid #3a456f;
+  background: linear-gradient(180deg, #111a36, #0f1428);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.scene-line strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: #9faff0;
+}
+
+.scene-line p {
+  margin: 8px 0 0;
+  font-size: 0.93rem;
+  line-height: 1.45;
+  color: #e5eaff;
+}
+
 .system-log {
   margin-top: 14px;
 }
@@ -311,6 +335,14 @@ body {
 .timeline-marker-rebuttal {
   background: #7a87ff;
   border-color: #9aa5ff;
+}
+
+.timeline-marker-escalation {
+  width: 11px;
+  height: 11px;
+  background: #ff7b72;
+  border-color: #ffb2ac;
+  box-shadow: 0 0 0 2px #0f1426, 0 0 15px #ff756f80;
 }
 
 .timeline-marker-outcome {
@@ -585,6 +617,16 @@ body {
   border-radius: 8px;
 }
 
+.timeline-item.medium {
+  border-left-color: #8a6fff;
+  background: #15172d;
+}
+
+.timeline-item.high {
+  border-left-color: #ff7f69;
+  background: #24161b;
+}
+
 .timeline-item p {
   margin: 0;
   font-size: 0.82rem;
@@ -615,7 +657,7 @@ body {
 
 .outcome-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -701,6 +743,8 @@ body {
 }
 
 .outcome-takeover strong {
+  display: block;
+  margin-top: 8px;
   max-width: 760px;
   font-size: 1.05rem;
   color: #dce2ff;

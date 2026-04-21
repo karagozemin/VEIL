@@ -4,6 +4,7 @@ type DemoRound = {
   scenario: string;
   turns: AgentTurn[];
   rebuttals: Array<{ agentId: string; targetAgentId: string; text: string }>;
+  escalations: Array<{ agentId: string; targetAgentId: string; text: string; severity: "medium" | "high" }>;
   outcome: MatchOutcome;
 };
 
@@ -76,19 +77,43 @@ export const getDeterministicDemoRound = (): DemoRound => {
     }
   ];
 
+  const escalations = [
+    {
+      agentId: "manipulator",
+      targetAgentId: "risk",
+      severity: "high" as const,
+      text: "Your caution kills momentum. One push in sentiment and your model gets overrun."
+    },
+    {
+      agentId: "risk",
+      targetAgentId: "manipulator",
+      severity: "high" as const,
+      text: "This is not momentum; it is manufactured conviction. Integrity checks flag your narrative."
+    },
+    {
+      agentId: "strategist",
+      targetAgentId: "trader",
+      severity: "medium" as const,
+      text: "You are optimizing entry speed while ignoring failure branches and exit liquidity constraints."
+    }
+  ];
+
   const outcome: MatchOutcome = {
     winnerAgentId: "risk",
     loserAgentIds: ["manipulator", "trader", "chaos", "strategist"],
     manipulationDetected: true,
     riskLevel: "HIGH",
     consensusScore: 28,
-    summary: "Manipulator influence looked persuasive but failed reliability checks. Risk wins the clash."
+    summary: "Manipulator influence looked persuasive but failed reliability checks. Risk wins the clash.",
+    projectedImpactPercent: 42,
+    impactStatement: "Sentinel Risk prevented a projected 42% loss by shutting down manipulative flow."
   };
 
   return {
     scenario,
     turns,
     rebuttals,
+    escalations,
     outcome
   };
 };

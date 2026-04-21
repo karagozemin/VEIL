@@ -59,6 +59,22 @@ const modeLabel: Record<MatchMode, string> = {
   demo: "DEMO"
 };
 
+const sceneStageLabel = (event: MatchEvent | null) => {
+  if (!event || event.type === "match_started" || event.type === "agent_thinking") {
+    return "STAGE 1 · DECISION";
+  }
+  if (event.type === "agent_decision") {
+    return "STAGE 1 · DECISION";
+  }
+  if (event.type === "agent_rebuttal") {
+    return "STAGE 2 · REBUTTAL";
+  }
+  if (event.type === "agent_escalation") {
+    return "STAGE 3 · ESCALATION";
+  }
+  return "STAGE 4 · COLLAPSE";
+};
+
 const socketUrl = (import.meta as ImportMeta & { env: { VITE_CLASH_SERVER?: string } }).env.VITE_CLASH_SERVER ?? "http://localhost:8787";
 
 function App() {
@@ -224,6 +240,13 @@ function App() {
       return;
     }
 
+    if (event.type === "agent_escalation") {
+      const heavy = event.severity === "high";
+      playTone({ type: "sawtooth", frequency: heavy ? 132 : 176, duration: heavy ? 0.14 : 0.11, volume: 0.024 });
+      playTone({ type: "square", frequency: heavy ? 74 : 92, duration: 0.1, volume: 0.015, delayMs: 24 });
+      return;
+    }
+
     if (event.type === "outcome") {
       syncAmbient(false);
       playTone({ type: "sine", frequency: 58, duration: 0.22, volume: 0.05, delayMs: 380 });
@@ -264,6 +287,14 @@ function App() {
         appendLog({
           level: "info",
           text: `${incomingEvent.agentId} challenged ${incomingEvent.targetAgentId}`,
+          timestamp: incomingEvent.timestamp
+        });
+      }
+
+      if (incomingEvent.type === "agent_escalation") {
+        appendLog({
+          level: incomingEvent.severity === "high" ? "warning" : "info",
+          text: `${incomingEvent.agentId} escalated against ${incomingEvent.targetAgentId}`,
           timestamp: incomingEvent.timestamp
         });
       }
@@ -365,6 +396,19 @@ function App() {
       shakeTimerRef.current = window.setTimeout(() => {
         setIsShaking(false);
       }, 260);
+      return;
+    }
+
+    if (event.type === "agent_escalation") {
+      setFocusAgentId(event.agentId);
+      setFocusBeat("aggressive");
+      setIsShaking(true);
+      if (shakeTimerRef.current) {
+        window.clearTimeout(shakeTimerRef.current);
+      }
+      shakeTimerRef.current = window.setTimeout(() => {
+        setIsShaking(false);
+      }, event.severity === "high" ? 360 : 280);
       return;
     }
 
@@ -571,6 +615,55 @@ function App() {
     };
   }, [events]);
 
+  const currentScene = useMemo(() => {
+    const event = replayState.lastEvent;
+    if (!event) {
+      return {
+        stage: "STAGE 1 · DECISION",
+        speaker: "SYSTEM",
+        text: "Awaiting first move..."
+      };
+    }
+
+    if (event.type === "agent_decision") {
+      return {
+        stage: sceneStageLabel(event),
+        speaker: event.turn.agentId,
+        text: event.turn.reasoning
+      };
+    }
+
+    if (event.type === "agent_rebuttal" || event.type === "agent_escalation") {
+      return {
+        stage: sceneStageLabel(event),
+        speaker: event.agentId,
+        text: event.text
+      };
+    }
+
+    if (event.type === "outcome") {
+      return {
+        stage: sceneStageLabel(event),
+        speaker: event.winnerAgentId,
+        text: event.impactStatement
+      };
+    }
+
+    if (event.type === "match_started") {
+      return {
+        stage: sceneStageLabel(event),
+        speaker: "SYSTEM",
+        text: "Arena synchronized. Agents are loading conflict posture."
+      };
+    }
+
+    return {
+      stage: sceneStageLabel(event),
+      speaker: event.agentId,
+      text: "Agents are locking targets..."
+    };
+  }, [replayState.lastEvent]);
+
   return (
     <div className={`app-shell ${outcomeVisible ? "camera-outcome" : ""}`.trim()}>
       <div className="scanline" />
@@ -637,6 +730,17 @@ function App() {
         onReplay={handleReplay}
         onPlayPause={togglePlayPause}
       />
+
+      <section className="scene-panel panel">
+        <div className="panel-head">
+          <h2>LIVE SCENE</h2>
+          <span>{currentScene.stage}</span>
+        </div>
+        <div className="scene-line">
+          <strong>{currentScene.speaker.toUpperCase()}</strong>
+          <p>{currentScene.text}</p>
+        </div>
+      </section>
 
       <main className={`battle-grid ${tensionZoom ? "camera-zoom" : ""} ${isShaking ? "camera-shake" : ""}`.trim()}>
         <section className="agents-panel panel">
@@ -746,10 +850,10 @@ function App() {
           <div className="timeline">
             <h3>ESCALATION FEED</h3>
             <AnimatePresence>
-              {replayState.rebuttals.slice(-6).map((rebuttal, index) => (
+              {[...replayState.rebuttals, ...replayState.escalations].slice(-7).map((rebuttal, index) => (
                 <motion.div
                   key={`${rebuttal.agentId}-${index}-${rebuttal.text}`}
-                  className="timeline-item"
+                  className={`timeline-item ${"severity" in rebuttal ? rebuttal.severity : ""}`.trim()}
                   initial={{ opacity: 0, x: -16 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 10 }}
@@ -784,6 +888,7 @@ function App() {
             <p>SYSTEM VERDICT</p>
             <h2>{replayState.outcome.winnerAgentId.toUpperCase()} WINS</h2>
             <strong>{replayState.outcome.summary}</strong>
+            <strong>{replayState.outcome.impactStatement}</strong>
             {replayState.outcome.manipulationDetected && <span>Manipulation attempt failed integrity checks.</span>}
           </motion.section>
         )}
@@ -807,6 +912,10 @@ function App() {
             <div>
               <p>CONSENSUS</p>
               <h3>{replayState.outcome.consensusScore}%</h3>
+            </div>
+            <div>
+              <p>PROJECTED IMPACT</p>
+              <h3>{replayState.outcome.projectedImpactPercent}%</h3>
             </div>
             <div>
               <p>MALICIOUS SIGNAL</p>

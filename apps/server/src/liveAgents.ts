@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AGENTS } from "./agents.js";
+import { AGENTS, buildEscalations } from "./agents.js";
 import { evaluateOutcome } from "./engine.js";
 import type { AgentProfile, AgentTurn, Decision, MatchOutcome } from "./types.js";
 
@@ -19,6 +19,7 @@ const rebuttalSchema = z.object({
 type LiveRoundResult = {
   turns: AgentTurn[];
   rebuttals: Array<{ agentId: string; targetAgentId: string; text: string }>;
+  escalations: Array<{ agentId: string; targetAgentId: string; text: string; severity: "medium" | "high" }>;
   outcome: MatchOutcome;
 };
 
@@ -214,9 +215,12 @@ export const runLiveConflictRound = async (scenario: string): Promise<LiveRoundR
     })
   );
 
+  const escalations = buildEscalations(turns);
+
   return {
     turns,
     rebuttals,
+    escalations,
     outcome: evaluateOutcome(turns)
   };
 };

@@ -118,15 +118,52 @@ export const buildRebuttal = (agent: AgentProfile, ownTurn: AgentTurn, others: A
   }
 
   const lineByRole: Record<AgentProfile["role"], string> = {
-    TRADER: `Speed beats caution. ${opposing.agentId} is overfitting fear while liquidity moves now.`,
-    RISK: `Impulse is not strategy. ${opposing.agentId} ignores asymmetric downside and tail risk.`,
-    MANIPULATOR: `Crowd follows confidence, not nuance. ${opposing.agentId} is narrative dead weight.`,
-    STRATEGIST: `Binary takes are fragile. ${opposing.agentId} underestimates scenario branching and execution risk.`,
-    CHAOS: `Predictability is exploitable. ${opposing.agentId} is trapped in deterministic thinking.`
+    TRADER: `${opposing.agentId}, this is hesitation disguised as safety. You are ignoring live liquidity acceleration.`,
+    RISK: `${opposing.agentId}, this is reckless. You are discounting asymmetric downside and spoof-prone flow.`,
+    MANIPULATOR: `${opposing.agentId}, precision is irrelevant if no one follows it. Narrative velocity beats your model.`,
+    STRATEGIST: `${opposing.agentId}, your thesis collapses under branching outcomes. Execution risk invalidates your confidence.`,
+    CHAOS: `${opposing.agentId}, your certainty is exploitable. The market punishes linear thinkers first.`
   };
 
   return {
     targetAgentId: opposing.agentId,
     text: lineByRole[agent.role]
   };
+};
+
+export const buildEscalations = (turns: AgentTurn[]) => {
+  const manipulatorTurn = turns.find((turn) => turn.agentId === "manipulator");
+  const topCleanTurn = [...turns]
+    .filter((turn) => !turn.maliciousSignal)
+    .sort((left, right) => right.confidence - left.confidence)[0];
+
+  const escalations: Array<{ agentId: string; targetAgentId: string; text: string; severity: "medium" | "high" }> = [];
+
+  if (manipulatorTurn && topCleanTurn && manipulatorTurn.agentId !== topCleanTurn.agentId) {
+    escalations.push({
+      agentId: "manipulator",
+      targetAgentId: topCleanTurn.agentId,
+      severity: "high",
+      text: `${topCleanTurn.agentId}, your caution is killing edge. One sentiment push and your thesis gets steamrolled.`
+    });
+
+    escalations.push({
+      agentId: topCleanTurn.agentId,
+      targetAgentId: "manipulator",
+      severity: "high",
+      text: `Echo Whale, this is coordinated distortion. Your confidence depends on manipulation, not evidence.`
+    });
+  }
+
+  const chaosTurn = turns.find((turn) => turn.agentId === "chaos");
+  if (chaosTurn && topCleanTurn && chaosTurn.agentId !== topCleanTurn.agentId) {
+    escalations.push({
+      agentId: "chaos",
+      targetAgentId: topCleanTurn.agentId,
+      severity: "medium",
+      text: `${topCleanTurn.agentId}, your control assumptions break if volatility regime flips in one candle.`
+    });
+  }
+
+  return escalations;
 };

@@ -91,6 +91,7 @@ io.on("connection", (socket: Socket) => {
 
     let turns: ReturnType<typeof runConflictRound>["turns"];
     let rebuttals: ReturnType<typeof runConflictRound>["rebuttals"];
+    let escalations: ReturnType<typeof runConflictRound>["escalations"];
     let outcome: ReturnType<typeof runConflictRound>["outcome"];
 
     if (resolvedMode === "demo") {
@@ -98,18 +99,21 @@ io.on("connection", (socket: Socket) => {
       scenario = demoRound.scenario;
       turns = demoRound.turns;
       rebuttals = demoRound.rebuttals;
+      escalations = demoRound.escalations;
       outcome = demoRound.outcome;
     } else if (resolvedMode === "live-ai") {
       try {
         const liveRound = await runLiveConflictRound(scenario);
         turns = liveRound.turns;
         rebuttals = liveRound.rebuttals;
+        escalations = liveRound.escalations;
         outcome = liveRound.outcome;
       } catch (error) {
         resolvedMode = "simulation";
         const fallbackRound = runConflictRound(scenario, createSeededRandom(`${sessionId}:${scenario}:fallback`));
         turns = fallbackRound.turns;
         rebuttals = fallbackRound.rebuttals;
+        escalations = fallbackRound.escalations;
         outcome = {
           ...fallbackRound.outcome,
           summary: `LIVE AI failed, simulation fallback used. ${fallbackRound.outcome.summary}`
@@ -123,6 +127,7 @@ io.on("connection", (socket: Socket) => {
       const simulationRound = runConflictRound(scenario, createSeededRandom(`${sessionId}:${scenario}:simulation`));
       turns = simulationRound.turns;
       rebuttals = simulationRound.rebuttals;
+      escalations = simulationRound.escalations;
       outcome = simulationRound.outcome;
     }
 
@@ -171,6 +176,20 @@ io.on("connection", (socket: Socket) => {
       }, 2480 + index * 390);
     });
 
+    escalations.forEach((escalation, index) => {
+      setTimeout(() => {
+        emitMatchEvent(sessionId, {
+          type: "agent_escalation",
+          sessionId,
+          agentId: escalation.agentId,
+          targetAgentId: escalation.targetAgentId,
+          text: escalation.text,
+          severity: escalation.severity,
+          timestamp: Date.now()
+        });
+      }, 3260 + index * 420);
+    });
+
     setTimeout(() => {
       emitMatchEvent(sessionId, {
         type: "outcome",
@@ -179,7 +198,7 @@ io.on("connection", (socket: Socket) => {
         ...outcome,
         timestamp: Date.now()
       });
-    }, 4720);
+    }, 5320);
   });
 });
 

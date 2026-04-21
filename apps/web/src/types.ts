@@ -17,6 +17,15 @@ export type MatchEvent =
   | { type: "agent_decision"; sessionId: string; turn: AgentTurn; timestamp: number }
   | { type: "agent_rebuttal"; sessionId: string; agentId: string; text: string; targetAgentId: string; timestamp: number }
   | {
+      type: "agent_escalation";
+      sessionId: string;
+      agentId: string;
+      targetAgentId: string;
+      text: string;
+      severity: "medium" | "high";
+      timestamp: number;
+    }
+  | {
       type: "outcome";
       sessionId: string;
       mode: MatchMode;
@@ -26,5 +35,7 @@ export type MatchEvent =
       riskLevel: "LOW" | "MEDIUM" | "HIGH";
       consensusScore: number;
       summary: string;
+      projectedImpactPercent: number;
+      impactStatement: string;
       timestamp: number;
     };

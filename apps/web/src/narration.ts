@@ -16,6 +16,14 @@ const rebuttalLineByAgent: Record<string, string> = {
   chaos: "Entropy spikes as contradiction multiplies."
 };
 
+const escalationLineByAgent: Record<string, string> = {
+  trader: "Trader doubles down and forces a high-voltage confrontation.",
+  risk: "Risk escalates to integrity enforcement and calls out structural fraud.",
+  manipulator: "Manipulator goes all-in, pushing narrative pressure to the limit.",
+  strategist: "Strategist escalates by exposing hidden failure branches.",
+  chaos: "Chaos spikes volatility assumptions and destabilizes confidence."
+};
+
 export const narrationForEvent = (event: MatchEvent | null) => {
   if (!event) {
     return "Awaiting scenario ignition...";
@@ -35,6 +43,10 @@ export const narrationForEvent = (event: MatchEvent | null) => {
 
   if (event.type === "agent_rebuttal") {
     return rebuttalLineByAgent[event.agentId] ?? "Conflict escalates through direct contradiction.";
+  }
+
+  if (event.type === "agent_escalation") {
+    return escalationLineByAgent[event.agentId] ?? "Conflict enters high-pressure escalation stage.";
   }
 
   if (event.manipulationDetected) {

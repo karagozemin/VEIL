@@ -7,6 +7,7 @@ export type ReplayState = {
   turns: Record<string, AgentTurn>;
   thinkingAgents: Set<string>;
   rebuttals: Array<{ agentId: string; targetAgentId: string; text: string }>;
+  escalations: Array<{ agentId: string; targetAgentId: string; text: string; severity: "medium" | "high" }>;
   outcome: Extract<MatchEvent, { type: "outcome" }> | null;
   lastEvent: MatchEvent | null;
   lastManipulatorAt: number | null;
@@ -49,6 +50,7 @@ export const resolveReplayState = (events: MatchEvent[], cursorMs: number): Repl
     turns: {},
     thinkingAgents: new Set<string>(),
     rebuttals: [],
+    escalations: [],
     outcome: null,
     lastEvent: null,
     lastManipulatorAt: null
@@ -99,6 +101,19 @@ export const resolveReplayState = (events: MatchEvent[], cursorMs: number): Repl
         text: event.text
       });
       if (event.agentId === "manipulator") {
+        initial.lastManipulatorAt = event.timestamp;
+      }
+      continue;
+    }
+
+    if (event.type === "agent_escalation") {
+      initial.escalations.push({
+        agentId: event.agentId,
+        targetAgentId: event.targetAgentId,
+        text: event.text,
+        severity: event.severity
+      });
+      if (event.agentId === "manipulator" || event.targetAgentId === "manipulator") {
         initial.lastManipulatorAt = event.timestamp;
       }
       continue;
