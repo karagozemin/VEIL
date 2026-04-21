@@ -56,11 +56,27 @@ npm --workspace @clash/server run demo -- "Should I long ETH after meme hype?"
 npm test
 ```
 
+## Live Readiness Check
+
+Before demos, verify LIVE AI credentials and provider reachability:
+
+```bash
+npm run check:live
+```
+
 ## Production Build
 
 ```bash
 npm run build
 ```
+
+## CI
+
+GitHub Actions CI is configured in `.github/workflows/ci.yml` and runs:
+
+- `npm ci`
+- `npm run build`
+- `npm test`
 
 ## Project Structure
 
@@ -87,6 +103,9 @@ Server variables for real LIVE AI mode:
 - `CLASH_LLM_API_KEY`: Required for `LIVE AI` mode
 - `CLASH_LLM_MODEL`: Optional (default: `gpt-4o-mini`)
 - `CLASH_LLM_BASE_URL`: Optional OpenAI-compatible base URL (default: `https://api.openai.com/v1`)
+- `CLASH_LLM_TIMEOUT_MS`: Optional request timeout in ms (default: `16000`)
+- `CLASH_LLM_MAX_RETRIES`: Optional retry count (default: `2`)
+- `CLASH_LLM_BREAKER_COOLDOWN_MS`: Optional circuit-breaker cooldown in ms (default: `45000`)
 
 ### Groq Setup (recommended for speed)
 

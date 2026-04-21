@@ -1,5 +1,6 @@
 import { AGENTS, analyzeScenario, buildRebuttal, generateAgentTurn } from "./agents.js";
 import { AgentTurn, MatchOutcome } from "./types.js";
+import type { RandomFn } from "./random.js";
 
 const normalize = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 
@@ -38,9 +39,9 @@ export const evaluateOutcome = (turns: AgentTurn[]): MatchOutcome => {
   };
 };
 
-export const runConflictRound = (scenario: string) => {
+export const runConflictRound = (scenario: string, random: RandomFn = Math.random) => {
   const analysis = analyzeScenario(scenario);
-  const turns = AGENTS.map((agent) => generateAgentTurn(agent, analysis));
+  const turns = AGENTS.map((agent) => generateAgentTurn(agent, analysis, random));
 
   turns.forEach((turn) => {
     turn.against = turns.filter((other) => other.agentId !== turn.agentId && other.decision !== turn.decision).map((other) => other.agentId);

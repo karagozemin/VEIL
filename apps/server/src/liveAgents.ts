@@ -34,6 +34,12 @@ const decisionList: Decision[] = ["BUY", "SELL", "HOLD", "DO_NOT_TOUCH", "LAUNCH
 
 const baseUrl = process.env.CLASH_LLM_BASE_URL?.trim() || "https://api.openai.com/v1";
 const model = process.env.CLASH_LLM_MODEL?.trim() || "gpt-4o-mini";
+const requestTimeoutMs = Number(process.env.CLASH_LLM_TIMEOUT_MS ?? 16000);
+const maxRetries = Number(process.env.CLASH_LLM_MAX_RETRIES ?? 2);
+const breakerCooldownMs = Number(process.env.CLASH_LLM_BREAKER_COOLDOWN_MS ?? 45000);
+
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0;
 
 const getApiKey = () => {
   const key = process.env.CLASH_LLM_API_KEY?.trim();
@@ -53,40 +59,74 @@ const extractJsonObject = (text: string) => {
 };
 
 const callChatCompletion = async (system: string, user: string) => {
+  if (Date.now() < circuitOpenUntil) {
+    throw new Error("LIVE AI circuit breaker is open; waiting for cooldown.");
+  }
+
   const apiKey = getApiKey();
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.35,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ]
-    })
-  });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`LLM request failed (${response.status}): ${errorText.slice(0, 220)}`);
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model,
+          temperature: 0.35,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`LLM request failed (${response.status}): ${errorText.slice(0, 220)}`);
+      }
+
+      const payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+
+      const content = payload.choices?.[0]?.message?.content?.trim();
+      if (!content) {
+        throw new Error("LLM response content is empty.");
+      }
+
+      const jsonText = extractJsonObject(content);
+      consecutiveFailures = 0;
+      circuitOpenUntil = 0;
+      return JSON.parse(jsonText) as unknown;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Unknown LLM request error");
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 3) {
+        circuitOpenUntil = Date.now() + breakerCooldownMs;
+      }
+
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      const retryDelay = 250 * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-
-  const content = payload.choices?.[0]?.message?.content?.trim();
-  if (!content) {
-    throw new Error("LLM response content is empty.");
-  }
-
-  const jsonText = extractJsonObject(content);
-  return JSON.parse(jsonText) as unknown;
+  throw new Error(`LIVE AI request failed after retries: ${lastError?.message ?? "unknown error"}`);
 };
 
 const askAgentDecision = async (agent: AgentProfile, scenario: string) => {

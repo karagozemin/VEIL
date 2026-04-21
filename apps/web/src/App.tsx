@@ -20,6 +20,15 @@ type AmbientNodes = {
   gain: GainNode;
 };
 
+type SystemLogLevel = "info" | "success" | "warning";
+
+type SystemLogEntry = {
+  id: string;
+  level: SystemLogLevel;
+  text: string;
+  timestamp: number;
+};
+
 const AGENTS: AgentMeta[] = [
   { id: "trader", name: "Vortex Trader", role: "Aggression Engine", color: "#16f2a5", vibe: "Momentum hunter" },
   { id: "risk", name: "Sentinel Risk", role: "Capital Guardian", color: "#ff5d7a", vibe: "Defensive firewall" },
@@ -61,6 +70,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [serverWarning, setServerWarning] = useState<string | null>(null);
+  const [systemLog, setSystemLog] = useState<SystemLogEntry[]>([]);
   const [dismissedOutcomeTimestamp, setDismissedOutcomeTimestamp] = useState<number | null>(null);
   const [focusAgentId, setFocusAgentId] = useState<string | null>(null);
   const [focusBeat, setFocusBeat] = useState<"smooth" | "snap" | "aggressive" | "outcome">("smooth");
@@ -78,6 +88,13 @@ function App() {
   const hasOutcomeEvent = useMemo(() => events.some((event) => event.type === "outcome"), [events]);
   const replayState = useMemo(() => resolveReplayState(events, cursorMs), [events, cursorMs]);
   const narration = useMemo(() => narrationForEvent(replayState.lastEvent), [replayState.lastEvent]);
+
+  const appendLog = (entry: Omit<SystemLogEntry, "id">) => {
+    setSystemLog((previous) => {
+      const next = [...previous, { id: `${entry.timestamp}-${previous.length}`, ...entry }];
+      return next.slice(-18);
+    });
+  };
 
   const findEventIndexAtCursor = (nextCursorMs: number) => {
     if (events.length === 0) {
@@ -232,6 +249,38 @@ function App() {
     setServerWarning(null);
 
     connection.on("match:event", (incomingEvent: MatchEvent) => {
+      if (incomingEvent.type === "match_started") {
+        appendLog({
+          level: incomingEvent.mode === "live-ai" ? "success" : "info",
+          text: `Match started in ${incomingEvent.mode.toUpperCase()} mode`,
+          timestamp: incomingEvent.timestamp
+        });
+      }
+
+      if (incomingEvent.type === "agent_decision") {
+        appendLog({
+          level: incomingEvent.turn.maliciousSignal ? "warning" : "info",
+          text: `${incomingEvent.turn.agentId} decided ${incomingEvent.turn.decision}`,
+          timestamp: incomingEvent.timestamp
+        });
+      }
+
+      if (incomingEvent.type === "agent_rebuttal") {
+        appendLog({
+          level: "info",
+          text: `${incomingEvent.agentId} challenged ${incomingEvent.targetAgentId}`,
+          timestamp: incomingEvent.timestamp
+        });
+      }
+
+      if (incomingEvent.type === "outcome") {
+        appendLog({
+          level: incomingEvent.mode === "live-ai" ? "success" : "info",
+          text: `Outcome: ${incomingEvent.winnerAgentId} wins (${incomingEvent.mode.toUpperCase()})`,
+          timestamp: incomingEvent.timestamp
+        });
+      }
+
       setEvents((previous) => {
         const lastTimestamp = previous[previous.length - 1]?.timestamp ?? incomingEvent.timestamp;
         let nextTimestamp = Math.max(incomingEvent.timestamp, lastTimestamp + 1);
@@ -255,6 +304,11 @@ function App() {
         return;
       }
       setServerWarning(warning);
+      appendLog({
+        level: "warning",
+        text: `Fallback warning: ${warning}`,
+        timestamp: Date.now()
+      });
     });
 
     return () => {
@@ -395,6 +449,7 @@ function App() {
     setCursorMs(0);
     setIsPlaying(autoPlay);
     setServerWarning(null);
+    setSystemLog([]);
     setDismissedOutcomeTimestamp(null);
     setFocusAgentId(null);
     setFocusBeat("smooth");
@@ -501,6 +556,26 @@ function App() {
   const outcomeVisible = Boolean(outcomeTakeover && replayState.outcome && dismissedOutcomeTimestamp !== replayState.outcome.timestamp);
   const tensionZoom = disagreementIndex >= 60 && !outcomeTakeover;
 
+  const runtimeStatus = useMemo(() => {
+    if (!replayState.mode) {
+      return { label: "IDLE", tone: "info" as const };
+    }
+
+    if (replayState.mode === "demo") {
+      return { label: "DEMO SCRIPT", tone: "info" as const };
+    }
+
+    if (replayState.mode === "live-ai") {
+      return { label: "LIVE VERIFIED", tone: "success" as const };
+    }
+
+    if (serverWarning) {
+      return { label: "FALLBACK SIMULATION", tone: "warning" as const };
+    }
+
+    return { label: "SIMULATION", tone: "info" as const };
+  }, [replayState.mode, serverWarning]);
+
   return (
     <div className={`app-shell ${outcomeVisible ? "camera-outcome" : ""}`.trim()}>
       <div className="scanline" />
@@ -565,6 +640,7 @@ function App() {
             ? `Session: ${replayState.sessionId} • ${modeLabel[replayState.mode ?? runMode]}`
             : `No active session • ${modeLabel[runMode]}`}
         </span>
+        <span className={`verify-badge ${runtimeStatus.tone}`.trim()}>{runtimeStatus.label}</span>
       </section>
 
       {serverWarning && <p className="warning-chip">{serverWarning}</p>}
@@ -586,6 +662,22 @@ function App() {
         onReplay={handleReplay}
         onPlayPause={togglePlayPause}
       />
+
+      <section className="system-log panel">
+        <div className="panel-head">
+          <h2>SYSTEM LOG</h2>
+          <span>{systemLog.length ? `${systemLog.length} events` : "No events"}</span>
+        </div>
+        <div className="system-log-list">
+          {systemLog.length === 0 && <p className="idle">Awaiting runtime events...</p>}
+          {systemLog.map((entry) => (
+            <div key={entry.id} className={`system-log-item ${entry.level}`.trim()}>
+              <span>{new Date(entry.timestamp).toLocaleTimeString()}</span>
+              <p>{entry.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <main className={`battle-grid ${tensionZoom ? "camera-zoom" : ""} ${isShaking ? "camera-shake" : ""}`.trim()}>
         <section className="agents-panel panel">

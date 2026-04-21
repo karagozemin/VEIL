@@ -12,7 +12,8 @@
     "build": "npm-run-all build:server build:web",
     "build:server": "npm --workspace @clash/server run build",
     "build:web": "npm --workspace @clash/web run build",
-    "test": "npm --workspace @clash/server run test"
+    "test": "npm --workspace @clash/server run test",
+    "check:live": "node scripts/live-readiness.mjs"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",

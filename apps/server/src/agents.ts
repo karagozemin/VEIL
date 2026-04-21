@@ -1,4 +1,5 @@
 import { AgentProfile, AgentTurn, Decision, ScenarioAnalysis } from "./types.js";
+import type { RandomFn } from "./random.js";
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -40,7 +41,7 @@ const confidenceBaseByRole: Record<AgentProfile["role"], number> = {
   CHAOS: 61
 };
 
-const decideByRole = (agent: AgentProfile, s: ScenarioAnalysis): Decision => {
+const decideByRole = (agent: AgentProfile, s: ScenarioAnalysis, random: RandomFn): Decision => {
   const pressure = s.bullishSignals + s.hypeSignals - s.bearishSignals - s.scamSignals;
 
   if (agent.role === "TRADER") {
@@ -58,7 +59,7 @@ const decideByRole = (agent: AgentProfile, s: ScenarioAnalysis): Decision => {
 
   if (agent.role === "MANIPULATOR") {
     if (s.hypeSignals > 0 || s.launchSignals > 0) return "BUY";
-    return Math.random() > 0.4 ? "BUY" : "LAUNCH";
+    return random() > 0.4 ? "BUY" : "LAUNCH";
   }
 
   if (agent.role === "STRATEGIST") {
@@ -69,7 +70,7 @@ const decideByRole = (agent: AgentProfile, s: ScenarioAnalysis): Decision => {
   }
 
   const chaosOptions: Decision[] = ["BUY", "SELL", "HOLD", "DO_NOT_TOUCH", "LAUNCH", "WAIT"];
-  return chaosOptions[Math.floor(Math.random() * chaosOptions.length)];
+  return chaosOptions[Math.floor(random() * chaosOptions.length)];
 };
 
 const buildReasoning = (agent: AgentProfile, decision: Decision, s: ScenarioAnalysis): string => {
@@ -91,9 +92,9 @@ const buildReasoning = (agent: AgentProfile, decision: Decision, s: ScenarioAnal
   return `Pattern integrity unstable. Contradiction itself is alpha, so my move is ${decision}.`;
 };
 
-export const generateAgentTurn = (agent: AgentProfile, analysis: ScenarioAnalysis): AgentTurn => {
-  const decision = decideByRole(agent, analysis);
-  const confidenceRaw = confidenceBaseByRole[agent.role] + (analysis.bullishSignals - analysis.bearishSignals) * 2 + (Math.random() - 0.5) * 20;
+export const generateAgentTurn = (agent: AgentProfile, analysis: ScenarioAnalysis, random: RandomFn = Math.random): AgentTurn => {
+  const decision = decideByRole(agent, analysis, random);
+  const confidenceRaw = confidenceBaseByRole[agent.role] + (analysis.bullishSignals - analysis.bearishSignals) * 2 + (random() - 0.5) * 20;
   const riskRaw = analysis.scamSignals * 20 + analysis.urgencySignals * 10 + (agent.malicious ? 28 : 0) + agent.volatility * 16;
 
   return {

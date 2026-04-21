@@ -10,6 +10,7 @@ import { AGENTS } from "./agents.js";
 import { getDeterministicDemoRound } from "./demoRound.js";
 import { runConflictRound } from "./engine.js";
 import { runLiveConflictRound } from "./liveAgents.js";
+import { createSeededRandom } from "./random.js";
 import { MatchEvent, MatchMode } from "./types.js";
 
 const app = express();
@@ -83,7 +84,7 @@ io.on("connection", (socket: Socket) => {
         outcome = liveRound.outcome;
       } catch (error) {
         resolvedMode = "simulation";
-        const fallbackRound = runConflictRound(scenario);
+        const fallbackRound = runConflictRound(scenario, createSeededRandom(`${sessionId}:${scenario}:fallback`));
         turns = fallbackRound.turns;
         rebuttals = fallbackRound.rebuttals;
         outcome = {
@@ -96,7 +97,7 @@ io.on("connection", (socket: Socket) => {
         });
       }
     } else {
-      const simulationRound = runConflictRound(scenario);
+      const simulationRound = runConflictRound(scenario, createSeededRandom(`${sessionId}:${scenario}:simulation`));
       turns = simulationRound.turns;
       rebuttals = simulationRound.rebuttals;
       outcome = simulationRound.outcome;
