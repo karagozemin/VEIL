@@ -1,7 +1,9 @@
-import "dotenv/config";
+import { config as dotenvConfig } from "dotenv";
 import cors from "cors";
 import express from "express";
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
 import { Server } from "socket.io";
 import type { Socket } from "socket.io";
@@ -13,12 +15,25 @@ import { runLiveConflictRound } from "./liveAgents.js";
 import { createSeededRandom } from "./random.js";
 import { MatchEvent, MatchMode } from "./types.js";
 
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDir = path.dirname(currentFilePath);
+const repositoryRoot = path.resolve(currentDir, "../../..");
+
+dotenvConfig();
+dotenvConfig({ path: path.join(repositoryRoot, ".env"), override: false });
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true, service: "clash-server" });
+  res.json({
+    ok: true,
+    service: "clash-server",
+    liveAiConfigured: Boolean(process.env.CLASH_LLM_API_KEY?.trim()),
+    llmBaseUrlConfigured: Boolean(process.env.CLASH_LLM_BASE_URL?.trim()),
+    llmModelConfigured: Boolean(process.env.CLASH_LLM_MODEL?.trim())
+  });
 });
 
 app.get("/agents", (_req: Request, res: Response) => {
@@ -61,10 +76,18 @@ io.on("connection", (socket: Socket) => {
     const inputScenario = parsed.data.scenario.trim();
     const requestedMode = parsed.data.mode ?? "simulation";
     const liveAiAvailable = Boolean(process.env.CLASH_LLM_API_KEY?.trim());
+    const requestedLiveAiWithoutKey = requestedMode === "live-ai" && !liveAiAvailable;
     let resolvedMode: MatchMode = requestedMode === "live-ai" && liveAiAvailable ? "live-ai" : requestedMode === "demo" ? "demo" : "simulation";
     let scenario = inputScenario;
 
     socket.join(sessionId);
+
+    if (requestedLiveAiWithoutKey) {
+      socket.emit("match:warning", {
+        sessionId,
+        message: "LIVE AI unavailable: missing API key, simulation fallback used"
+      });
+    }
 
     let turns: ReturnType<typeof runConflictRound>["turns"];
     let rebuttals: ReturnType<typeof runConflictRound>["rebuttals"];

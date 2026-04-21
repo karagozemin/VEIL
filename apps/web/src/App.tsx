@@ -68,7 +68,6 @@ function App() {
   const [runMode, setRunMode] = useState<Exclude<MatchMode, "demo">>("live-ai");
   const [cursorMs, setCursorMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [serverWarning, setServerWarning] = useState<string | null>(null);
   const [systemLog, setSystemLog] = useState<SystemLogEntry[]>([]);
   const [dismissedOutcomeTimestamp, setDismissedOutcomeTimestamp] = useState<number | null>(null);
@@ -233,15 +232,12 @@ function App() {
   };
 
   useEffect(() => {
-    soundEnabledRef.current = soundEnabled;
-    if (!soundEnabled) {
-      syncAmbient(false);
-      return;
-    }
     if (isPlaying && events.length > 0) {
       syncAmbient(true);
+      return;
     }
-  }, [soundEnabled, isPlaying, events.length]);
+    syncAmbient(false);
+  }, [isPlaying, events.length]);
 
   useEffect(() => {
     const connection = io(socketUrl, { transports: ["websocket"] });
@@ -422,7 +418,7 @@ function App() {
   }, [replayState.lastEvent, replayState.outcome]);
 
   useEffect(() => {
-    if (!isPlaying || !soundEnabled || events.length === 0) {
+    if (!isPlaying || events.length === 0) {
       return;
     }
 
@@ -442,7 +438,7 @@ function App() {
     }
 
     lastAudibleEventIndexRef.current = visibleIndex;
-  }, [cursorMs, isPlaying, events, soundEnabled]);
+  }, [cursorMs, isPlaying, events]);
 
   const resetPlayback = (nextEvents: MatchEvent[], autoPlay: boolean) => {
     setEvents(nextEvents);
@@ -612,14 +608,11 @@ function App() {
         <button className={`control-btn ${runMode === "simulation" ? "mode-active" : ""}`.trim()} onClick={() => setRunMode("simulation")}>
           SIMULATION
         </button>
-        <button className="control-btn" onClick={() => setSoundEnabled((prev) => !prev)}>
-          {soundEnabled ? "SOUND ON" : "SOUND OFF"}
-        </button>
         <button className="control-btn" disabled={events.length === 0} onClick={exportReplay}>
-          EXPORT REPLAY
+          EXPORT REPLAY JSON
         </button>
         <button className="control-btn" onClick={() => replayImportInputRef.current?.click()}>
-          LOAD REPLAY
+          LOAD REPLAY JSON
         </button>
         <input
           ref={replayImportInputRef}

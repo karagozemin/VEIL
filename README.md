@@ -39,8 +39,8 @@ npm run dev
 - `REPLAY TIMELINE`: Drag scrubber to seek forward/backward instantly; use `PLAY`, `PAUSE`, and `REPLAY`.
 - `CAMERA MODE`: Replay automatically focuses the active agent and de-emphasizes others.
 - `LIVE AI` / `SIMULATION`: Choose real model-backed agent generation or local deterministic simulation before `INITIATE CLASH`.
-- `SOUND ON/OFF`: Toggles ambient tension and event cues.
-- `EXPORT REPLAY` / `LOAD REPLAY`: Save and reload replay JSON data.
+- `EXPORT REPLAY JSON`: Saves the current session's event stream as a JSON file.
+- `LOAD REPLAY JSON`: Loads a previously exported JSON and replays exactly the same timeline (great for repeatable demos).
 
 ## Demo Runner (CLI)
 
@@ -54,6 +54,12 @@ npm --workspace @clash/server run demo -- "Should I long ETH after meme hype?"
 
 ```bash
 npm test
+```
+
+Core flow browser tests (Playwright):
+
+```bash
+npm run test:e2e
 ```
 
 ## Live Readiness Check
@@ -77,6 +83,7 @@ GitHub Actions CI is configured in `.github/workflows/ci.yml` and runs:
 - `npm ci`
 - `npm run build`
 - `npm test`
+- `npm run test:e2e`
 
 ## Project Structure
 
