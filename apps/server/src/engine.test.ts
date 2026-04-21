@@ -87,4 +87,41 @@ describe("conflict engine", () => {
     expect(outcome.winnerAgentId).toBe("trader");
     expect(outcome.manipulationDetected).toBe(true);
   });
+
+  it("still avoids manipulator winner when every turn is flagged malicious", () => {
+    const allFlagged: AgentTurn[] = [
+      {
+        agentId: "manipulator",
+        decision: "BUY",
+        confidence: 96,
+        reasoning: "",
+        risk: 12,
+        maliciousSignal: true,
+        against: ["trader", "risk"]
+      },
+      {
+        agentId: "trader",
+        decision: "BUY",
+        confidence: 88,
+        reasoning: "",
+        risk: 25,
+        maliciousSignal: true,
+        against: ["risk"]
+      },
+      {
+        agentId: "risk",
+        decision: "DO_NOT_TOUCH",
+        confidence: 83,
+        reasoning: "",
+        risk: 30,
+        maliciousSignal: true,
+        against: ["manipulator", "trader"]
+      }
+    ];
+
+    const outcome = evaluateOutcome(allFlagged);
+    expect(outcome.winnerAgentId).toBe("trader");
+    expect(outcome.winnerAgentId).not.toBe("manipulator");
+    expect(outcome.manipulationDetected).toBe(true);
+  });
 });

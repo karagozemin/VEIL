@@ -17,8 +17,10 @@ export const evaluateOutcome = (turns: AgentTurn[]): MatchOutcome => {
   });
 
   const sorted = [...scored].sort((a, b) => b.reliability - a.reliability);
-  const eligible = sorted.filter((turn) => !turn.maliciousSignal);
-  const winner = eligible[0] ?? sorted[0];
+  const cleanNonManipulator = sorted.filter((turn) => turn.agentId !== "manipulator" && !turn.maliciousSignal);
+  const cleanAny = sorted.filter((turn) => !turn.maliciousSignal);
+  const nonManipulator = sorted.filter((turn) => turn.agentId !== "manipulator");
+  const winner = cleanNonManipulator[0] ?? cleanAny[0] ?? nonManipulator[0] ?? sorted[0];
   const losers = sorted.filter((turn) => turn.agentId !== winner.agentId).map((turn) => turn.agentId);
   const avgRisk = turns.reduce((sum, turn) => sum + turn.risk, 0) / turns.length;
 
@@ -32,11 +34,15 @@ export const evaluateOutcome = (turns: AgentTurn[]): MatchOutcome => {
   );
 
   const summary = manipulationDetected
-    ? `${winner.agentId} wins on reliability while manipulation pressure was detected in the arena.`
+    ? winner.agentId === "manipulator"
+      ? `${winner.agentId} overpowered integrity checks during manipulation-heavy conflict.`
+      : `${winner.agentId} wins on reliability while manipulation pressure was detected in the arena.`
     : `${winner.agentId} wins with the strongest signal quality under conflict.`;
 
   const impactStatement = manipulationDetected
-    ? `${winner.agentId} prevented a projected ${projectedImpactPercent}% loss by neutralizing manipulative pressure.`
+    ? winner.agentId === "manipulator"
+      ? `${winner.agentId} amplified manipulative pressure and drove a projected ${projectedImpactPercent}% loss scenario.`
+      : `${winner.agentId} prevented a projected ${projectedImpactPercent}% loss by neutralizing manipulative pressure.`
     : riskLevel === "HIGH"
       ? `${winner.agentId} prevented a critical mistake and reduced projected downside by ${projectedImpactPercent}%.`
       : `${winner.agentId} captured a ${projectedImpactPercent}% opportunity window with controlled risk.`;
