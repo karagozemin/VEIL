@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import DarkVeil from "./components/DarkVeil";
 import { TimelineScrubber } from "./components/TimelineScrubber";
 import { narrationForEvent } from "./narration";
 import { getDurationMs, getEventMarkers, getRelativeTime, resolveReplayState } from "./replayEngine";
@@ -953,6 +954,10 @@ function App() {
         ensureWalletConnected();
       }}
     >
+      <div className="darkveil-layer">
+        <DarkVeil hueShift={18} noiseIntensity={0.03} speed={2.15} scanlineIntensity={0.08} scanlineFrequency={1.5} warpAmount={0.28} />
+      </div>
+
       <div className="scanline" />
 
       <AnimatePresence mode="wait">

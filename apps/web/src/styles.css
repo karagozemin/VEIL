@@ -26,8 +26,17 @@ body {
   min-height: 100vh;
   padding: 26px;
   position: relative;
+  isolation: isolate;
   max-width: 1500px;
   margin: 0 auto;
+}
+
+.darkveil-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  opacity: 0.85;
 }
 
 .narration-overlay {
