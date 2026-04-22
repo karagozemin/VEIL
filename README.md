@@ -49,6 +49,7 @@ npm run dev
 
 - `WATCH A VEIL`: One-click instant demo start with a deterministic locked scenario (no typing).
 - `WALLET CONTEXT`: `WATCH A VEIL` works without wallet for smooth judging; gated actions still open in-app wallet popup.
+- `LIVE AI SIGNATURE`: `LIVE AI` mode requires an off-chain BNB Chain message signature (gasless) before live model calls are allowed.
 - `REPLAY TIMELINE`: Drag scrubber to seek forward/backward instantly; use `PLAY`, `PAUSE`, and `REPLAY`.
 - `REPLAY HIGHLIGHTS`: Jump to `FIRST CONFLICT`, `PEAK MANIPULATION`, and `FINAL OUTCOME`.
 - `LIVE SCENE`: Shows the currently speaking agent and stage progression in real time.

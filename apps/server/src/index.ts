@@ -3,10 +3,12 @@ import cors from "cors";
 import express from "express";
 import http from "node:http";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
 import { Server } from "socket.io";
 import type { Socket } from "socket.io";
+import { isAddress, verifyMessage } from "viem";
 import { z } from "zod";
 import { AGENTS } from "./agents.js";
 import { getDeterministicDemoRound } from "./demoRound.js";
@@ -68,7 +70,164 @@ const io = new Server(server, {
 const scenarioSchema = z.object({
   scenario: z.string().min(3),
   sessionId: z.string().optional(),
-  mode: z.enum(["simulation", "live-ai", "demo"]).optional()
+  mode: z.enum(["simulation", "live-ai", "demo"]).optional(),
+  liveAuthToken: z.string().min(12).optional()
+});
+
+const challengeSchema = z.object({
+  address: z.string(),
+  chainId: z.number().optional()
+});
+
+const verifySchema = z.object({
+  address: z.string(),
+  signature: z.string().regex(/^0x[a-fA-F0-9]+$/)
+});
+
+type LiveChallenge = {
+  message: string;
+  nonce: string;
+  chainId: number;
+  expiresAt: number;
+};
+
+type LiveToken = {
+  address: string;
+  expiresAt: number;
+};
+
+const liveChallenges = new Map<string, LiveChallenge>();
+const liveTokens = new Map<string, LiveToken>();
+
+const CHALLENGE_TTL_MS = 3 * 60 * 1000;
+const LIVE_TOKEN_TTL_MS = 20 * 60 * 1000;
+const BNB_MAINNET_CHAIN_ID = 56;
+const BNB_TESTNET_CHAIN_ID = 97;
+const SUPPORTED_BNB_CHAIN_IDS = new Set([BNB_MAINNET_CHAIN_ID, BNB_TESTNET_CHAIN_ID]);
+
+const nowMs = () => Date.now();
+
+const toAddressKey = (value: string) => value.toLowerCase();
+
+const purgeExpiredAuthState = () => {
+  const current = nowMs();
+
+  for (const [addressKey, challenge] of liveChallenges.entries()) {
+    if (challenge.expiresAt <= current) {
+      liveChallenges.delete(addressKey);
+    }
+  }
+
+  for (const [token, session] of liveTokens.entries()) {
+    if (session.expiresAt <= current) {
+      liveTokens.delete(token);
+    }
+  }
+};
+
+const chainName = (chainId: number) => (chainId === BNB_TESTNET_CHAIN_ID ? "BNB Chain Testnet" : "BNB Chain");
+
+const buildChallengeMessage = (address: string, chainId: number, nonce: string, expiresAt: number) => {
+  const issuedAt = new Date().toISOString();
+  const expiresAtIso = new Date(expiresAt).toISOString();
+
+  return [
+    "VEIL LIVE AUTHORIZATION",
+    "",
+    "Sign this message to enable LIVE AI mode.",
+    "This is an off-chain signature and costs no gas.",
+    "",
+    `Address: ${address}`,
+    `Chain: ${chainName(chainId)} (${chainId})`,
+    `Nonce: ${nonce}`,
+    `Issued At: ${issuedAt}`,
+    `Expires At: ${expiresAtIso}`
+  ].join("\n");
+};
+
+app.post("/auth/challenge", (req: Request, res: Response) => {
+  purgeExpiredAuthState();
+
+  const parsed = challengeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid challenge payload" });
+    return;
+  }
+
+  const rawAddress = parsed.data.address.trim();
+  if (!isAddress(rawAddress)) {
+    res.status(400).json({ message: "Invalid wallet address" });
+    return;
+  }
+
+  if (parsed.data.chainId !== undefined && !SUPPORTED_BNB_CHAIN_IDS.has(parsed.data.chainId)) {
+    res.status(400).json({ message: "BNB Chain required for LIVE AI signature" });
+    return;
+  }
+
+  const addressKey = toAddressKey(rawAddress);
+  const requestedChainId = parsed.data.chainId ?? BNB_MAINNET_CHAIN_ID;
+  const nonce = randomUUID();
+  const expiresAt = nowMs() + CHALLENGE_TTL_MS;
+  const message = buildChallengeMessage(rawAddress, requestedChainId, nonce, expiresAt);
+
+  liveChallenges.set(addressKey, { message, nonce, chainId: requestedChainId, expiresAt });
+
+  res.json({
+    address: rawAddress,
+    chainId: requestedChainId,
+    nonce,
+    message,
+    expiresAt
+  });
+});
+
+app.post("/auth/verify", async (req: Request, res: Response) => {
+  purgeExpiredAuthState();
+
+  const parsed = verifySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid verify payload" });
+    return;
+  }
+
+  const rawAddress = parsed.data.address.trim();
+  if (!isAddress(rawAddress)) {
+    res.status(400).json({ message: "Invalid wallet address" });
+    return;
+  }
+
+  const addressKey = toAddressKey(rawAddress);
+  const challenge = liveChallenges.get(addressKey);
+
+  if (!challenge || challenge.expiresAt <= nowMs()) {
+    liveChallenges.delete(addressKey);
+    res.status(401).json({ message: "Challenge expired. Request a new signature challenge." });
+    return;
+  }
+
+  const isValid = await verifyMessage({
+    address: rawAddress as `0x${string}`,
+    message: challenge.message,
+    signature: parsed.data.signature as `0x${string}`
+  });
+
+  if (!isValid) {
+    res.status(401).json({ message: "Invalid signature" });
+    return;
+  }
+
+  const token = randomUUID();
+  const expiresAt = nowMs() + LIVE_TOKEN_TTL_MS;
+  liveTokens.set(token, { address: addressKey, expiresAt });
+  liveChallenges.delete(addressKey);
+
+  res.json({
+    token,
+    expiresAt,
+    address: rawAddress,
+    chainId: challenge.chainId
+  });
 });
 
 const emitMatchEvent = (sessionId: string, payload: MatchEvent) => {
@@ -103,8 +262,13 @@ io.on("connection", (socket: Socket) => {
     const sessionId = parsed.data.sessionId ?? `match_${Math.random().toString(36).slice(2, 9)}`;
     const inputScenario = parsed.data.scenario.trim();
     const requestedMode = parsed.data.mode ?? "simulation";
+    purgeExpiredAuthState();
+
+    const requestedLiveAuthToken = parsed.data.liveAuthToken?.trim();
+    const liveAuthSession = requestedLiveAuthToken ? liveTokens.get(requestedLiveAuthToken) : undefined;
     const liveAiAvailable = Boolean(process.env.VEIL_LLM_API_KEY?.trim());
     const requestedLiveAiWithoutKey = requestedMode === "live-ai" && !liveAiAvailable;
+    const requestedLiveAiWithoutSignature = requestedMode === "live-ai" && (!requestedLiveAuthToken || !liveAuthSession || liveAuthSession.expiresAt <= nowMs());
     let resolvedMode: MatchMode = requestedMode === "live-ai" && liveAiAvailable ? "live-ai" : requestedMode === "demo" ? "demo" : "simulation";
     let scenario = inputScenario;
 
@@ -114,6 +278,14 @@ io.on("connection", (socket: Socket) => {
       socket.emit("match:warning", {
         sessionId,
         message: "LIVE AI unavailable: missing API key, simulation fallback used"
+      });
+    }
+
+    if (requestedLiveAiWithoutSignature) {
+      resolvedMode = "simulation";
+      socket.emit("match:warning", {
+        sessionId,
+        message: "LIVE AI locked: sign with BNB wallet first, simulation fallback used"
       });
     }
 

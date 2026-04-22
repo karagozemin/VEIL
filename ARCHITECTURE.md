@@ -126,6 +126,12 @@ Guarded operations include:
 - replay export
 - share action
 
+LIVE AI extra guard:
+
+- `live-ai` mode additionally requires a verified BNB Chain off-chain message signature
+- server flow: `POST /auth/challenge` -> wallet signature -> `POST /auth/verify` -> short-lived `liveAuthToken`
+- missing/expired token degrades to `simulation` with `match:warning`
+
 Ungated demo operations:
 
 - `WATCH A VEIL` / `WATCH NEXT VEIL`

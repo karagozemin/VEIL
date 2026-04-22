@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { useAccountModal, useChainModal, useConnectModal } from "@rainbow-me/rainbowkit";
 import { io, type Socket } from "socket.io-client";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount, useChainId, useSignMessage } from "wagmi";
 import DarkVeil from "./components/DarkVeil";
 import { TimelineScrubber } from "./components/TimelineScrubber";
 import { narrationForEvent } from "./narration";
@@ -34,6 +34,16 @@ type SystemLogEntry = {
 
 type HealthPayload = {
   llmProviderHint?: string;
+};
+
+type LiveAuthChallengeResponse = {
+  message: string;
+  expiresAt: number;
+};
+
+type LiveAuthVerifyResponse = {
+  token: string;
+  expiresAt: number;
 };
 
 const AGENTS: AgentMeta[] = [
@@ -85,11 +95,15 @@ const sceneStageLabel = (event: MatchEvent | null) => {
 };
 
 const socketUrl = (import.meta as ImportMeta & { env: { VITE_VEIL_SERVER?: string } }).env.VITE_VEIL_SERVER ?? "http://localhost:8787";
+const SUPPORTED_BNB_CHAIN_IDS = new Set([56, 97]);
 
 function App() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { openConnectModal } = useConnectModal();
+  const { openAccountModal } = useAccountModal();
+  const { openChainModal } = useChainModal();
+  const { signMessageAsync } = useSignMessage();
   const walletAddress = address ?? null;
   const walletChainId = isConnected ? chainId : null;
 
@@ -107,6 +121,10 @@ function App() {
   const [isShaking, setIsShaking] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [walletPopupOpen, setWalletPopupOpen] = useState(false);
+  const [liveAuthToken, setLiveAuthToken] = useState<string | null>(null);
+  const [liveAuthExpiresAt, setLiveAuthExpiresAt] = useState<number>(0);
+  const [liveAuthAddress, setLiveAuthAddress] = useState<string | null>(null);
+  const [isLiveAuthPending, setIsLiveAuthPending] = useState(false);
   const [llmProviderHint, setLlmProviderHint] = useState<string>("unknown");
 
   const soundEnabledRef = useRef(true);
@@ -136,6 +154,9 @@ function App() {
     }
     if (currentChainId === 56) {
       return "BNB Chain";
+    }
+    if (currentChainId === 97) {
+      return "BNB Chain Testnet";
     }
     if (currentChainId === 1) {
       return "Ethereum";
@@ -414,6 +435,21 @@ function App() {
   }, [walletAddress, walletPopupOpen]);
 
   useEffect(() => {
+    if (!walletAddress || !walletChainId || !SUPPORTED_BNB_CHAIN_IDS.has(walletChainId)) {
+      setLiveAuthToken(null);
+      setLiveAuthExpiresAt(0);
+      setLiveAuthAddress(null);
+      return;
+    }
+
+    if (liveAuthAddress && liveAuthAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+      setLiveAuthToken(null);
+      setLiveAuthExpiresAt(0);
+      setLiveAuthAddress(null);
+    }
+  }, [walletAddress, walletChainId, liveAuthAddress]);
+
+  useEffect(() => {
     if (!isPlaying) {
       syncAmbient(false);
       return;
@@ -582,14 +618,104 @@ function App() {
     return false;
   };
 
-  const startVeil = () => {
+  const fetchLiveAuthToken = async () => {
+    if (!walletAddress) {
+      return null;
+    }
+
+    if (!walletChainId || !SUPPORTED_BNB_CHAIN_IDS.has(walletChainId)) {
+      setWalletError("Switch to BNB Chain (mainnet/testnet) and sign to enable LIVE AI.");
+      appendLog({
+        level: "warning",
+        text: `LIVE AI requires BNB signature. Current chain: ${walletChainId ?? "unknown"}`,
+        timestamp: Date.now()
+      });
+      openChainModal?.();
+      return null;
+    }
+
+    const hasValidToken =
+      liveAuthToken &&
+      liveAuthExpiresAt > Date.now() &&
+      liveAuthAddress?.toLowerCase() === walletAddress.toLowerCase();
+
+    if (hasValidToken) {
+      return liveAuthToken;
+    }
+
+    setIsLiveAuthPending(true);
+    try {
+      const challengeResponse = await fetch(`${socketUrl}/auth/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: walletAddress, chainId: walletChainId })
+      });
+
+      if (!challengeResponse.ok) {
+        const payload = (await challengeResponse.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(payload?.message ?? "Unable to create signature challenge");
+      }
+
+      const challengePayload = (await challengeResponse.json()) as LiveAuthChallengeResponse;
+      if (!challengePayload.message || challengePayload.expiresAt <= Date.now()) {
+        throw new Error("Invalid challenge payload");
+      }
+
+      const signature = await signMessageAsync({ message: challengePayload.message, account: walletAddress as `0x${string}` });
+
+      const verifyResponse = await fetch(`${socketUrl}/auth/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: walletAddress, signature })
+      });
+
+      if (!verifyResponse.ok) {
+        const payload = (await verifyResponse.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(payload?.message ?? "Signature verification failed");
+      }
+
+      const verifyPayload = (await verifyResponse.json()) as LiveAuthVerifyResponse;
+      setLiveAuthToken(verifyPayload.token);
+      setLiveAuthExpiresAt(verifyPayload.expiresAt);
+      setLiveAuthAddress(walletAddress);
+      appendLog({
+        level: "success",
+        text: "LIVE AI signature verified on BNB Chain.",
+        timestamp: Date.now()
+      });
+      return verifyPayload.token;
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "Signature required for LIVE AI";
+      const message = rawMessage === "Failed to fetch" ? `LIVE auth server unreachable: ${socketUrl}` : rawMessage;
+      setWalletError(message);
+      appendLog({
+        level: "warning",
+        text: `LIVE AI signature failed: ${message}`,
+        timestamp: Date.now()
+      });
+      return null;
+    } finally {
+      setIsLiveAuthPending(false);
+    }
+  };
+
+  const startVeil = async () => {
     if (!ensureWalletConnected() || !socket || scenario.trim().length < 3) {
       return;
     }
 
+    let token: string | undefined;
+    if (runMode === "live-ai") {
+      const verifiedToken = await fetchLiveAuthToken();
+      if (!verifiedToken) {
+        return;
+      }
+      token = verifiedToken;
+    }
+
     const nextSessionId = `match_${Date.now().toString(36)}`;
     resetPlayback([], true);
-    socket.emit("scenario:start", { scenario: scenario.trim(), sessionId: nextSessionId, mode: runMode });
+    socket.emit("scenario:start", { scenario: scenario.trim(), sessionId: nextSessionId, mode: runMode, liveAuthToken: token });
   };
 
   const runDemo = () => {
@@ -623,6 +749,17 @@ function App() {
 
   const connectWallet = () => {
     setWalletError(null);
+    if (walletAddress) {
+      if (openAccountModal) {
+        openAccountModal();
+        return;
+      }
+      if (openChainModal) {
+        openChainModal();
+        return;
+      }
+    }
+
     if (openConnectModal) {
       openConnectModal();
       return;
@@ -909,7 +1046,7 @@ function App() {
       </AnimatePresence>
 
       <button className="wallet-float-btn" onClick={connectWallet}>
-        {walletAddress ? "WALLET CONNECTED" : "CONNECT WALLET"}
+        {walletAddress ? `WALLET ${shortAddress(walletAddress)}` : "CONNECT WALLET"}
       </button>
 
       <AnimatePresence>
@@ -985,6 +1122,15 @@ function App() {
         <button className="control-btn" disabled={!replayState.outcome} onClick={() => void shareVeil()}>
           SHARE THIS VEIL
         </button>
+        {runMode === "live-ai" && (
+          <button
+            className={`control-btn ${liveAuthToken && liveAuthExpiresAt > Date.now() ? "mode-active" : ""}`.trim()}
+            disabled={isLiveAuthPending || !walletAddress}
+            onClick={() => void fetchLiveAuthToken()}
+          >
+            {isLiveAuthPending ? "SIGNING..." : liveAuthToken && liveAuthExpiresAt > Date.now() ? "LIVE SIGNED" : "SIGN FOR LIVE"}
+          </button>
+        )}
       </section>
 
       {walletError && <p className="warning-chip">{walletError}</p>}
