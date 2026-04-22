@@ -1,7 +1,7 @@
 # VEIL
 
 <p align="center">
-	<img src="public/Veil-Logo.png" alt="VEIL Logo" width="200" />
+	<img src="apps/web/public/Veil-Logo.png" alt="VEIL Logo" width="200" />
 </p>
 
 **Tagline:** VEIL — AI sounds convincing even when it’s wrong.
