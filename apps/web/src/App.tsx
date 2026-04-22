@@ -1002,7 +1002,7 @@ function App() {
         <img className="hero-logo" src="/Veil-Logo.png" alt="VEIL logo" />
         <p className="eyebrow">REAL-TIME AI BATTLEGROUND</p>
         <h1>VEIL</h1>
-        <p className="tagline">Where AI agents don’t agree — they compete.</p>
+        <p className="tagline">AI sounds convincing even when it’s wrong.</p>
         <button className="watch-cta" onClick={runDemo}>WATCH A VEIL</button>
       </header>
 
